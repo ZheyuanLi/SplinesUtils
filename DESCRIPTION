@@ -1,0 +1,11 @@
+Package: SplinesUtils
+Version: 0.1-1
+Date: 2018-10-07
+Title: Utility functions for univariate cubic interpolation splines, smoothing splines and regression B-splines
+Author: Zheyuan Li <zheyuan.li@bath.edu>
+Maintainer: Zheyuan Li <zheyuan.li@bath.edu>
+Depends: R (>= 3.4.0), splines
+Imports: stats, graphics
+Description: Reparametrize univariate cubic interpolation splines, smoothing splines and regression B-splines as piecewise polynomials. Export polynomial coefficients as a matrix and print polynomial equations as formatted strings. Plot and predict a spline or its derivatives. Solve a spline or its derivatives for a given value.
+License: GPL-3
+NeedsCompilation: no

@@ -1,0 +1,11 @@
+export(RegBsplineAsPiecePoly,
+       CubicInterpSplineAsPiecePoly,
+       SmoothSplineAsPiecePoly)
+
+import(graphics, stats, splines)
+
+S3method(summary, PiecePoly)
+S3method(print, PiecePoly)
+S3method(plot, PiecePoly)
+S3method(predict, PiecePoly)
+S3method(solve, PiecePoly)
