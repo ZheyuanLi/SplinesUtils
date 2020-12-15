@@ -150,9 +150,9 @@ PolyEqn <- function (pc, shift, knot) {
     sgn <- rep.int(" - ", length(pc2))
     sgn[pc2 > 0] <- " + "
     if (shift) {
-      xterm2 <- sprintf("%s%.3g * (x%s%.3g) ^ %d", coef_sgn, abs(pc2), rev_knot_sgn, knot, seq_along(pc2) + 1L)
+      xterm2 <- sprintf("%s%.3g * (x%s%.3g) ^ %d", sgn, abs(pc2), rev_knot_sgn, knot, seq_along(pc2) + 1L)
       } else {
-      xterm2 <- sprintf("%s%.3g * x ^ %d", coef_sgn, abs(pc2), seq_along(pc2) + 1L)
+      xterm2 <- sprintf("%s%.3g * x ^ %d", sgn, abs(pc2), seq_along(pc2) + 1L)
       }
     xterm2 <- paste0(xterm2, collapse = "")
     } else xterm2 <- ""
