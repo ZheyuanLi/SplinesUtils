@@ -24,6 +24,9 @@ CubicInterpSplineAsPiecePoly <- function (x, y, method = c("fmm", "natural", "pe
 
 ## represent a fitted smoothing spline as an interpolation spline
 SmoothSplineAsPiecePoly <- function (SmoothSpline) {
+  ## input validation
+  if (!inherits(SmoothSpline, "smooth.spline"))
+    stop("This function only works with models that inherits 'smooth.spline' class!")
   ## knots of the smoothing spline
   kx <- with(SmoothSpline$fit, knot * range + min)
   kx <- kx[4:(length(kx) - 3)]
@@ -32,65 +35,56 @@ SmoothSplineAsPiecePoly <- function (SmoothSpline) {
   CubicInterpSplineAsPiecePoly(kx, ky, method = "natural")
   }
 
-#######################################################
-# `bs` or `ns` term in a "lm" or "glm" as "PiecePoly" #
-#######################################################
+##############################################################
+# `bs` or `ns` term in a "lm", "glm" or "lme" as "PiecePoly" #
+##############################################################
 
-## export a `bs` or `ns` term in a "lm" or "glm" as piecewise polynomials
-RegBsplineAsPiecePoly <- function (lm_glm, SplineTerm, shift = TRUE) {
-
-  ##################################
-  # analyze input regression model #
-  ##################################
-
-  if (!inherits(lm_glm, c("lm", "glm")))
-    stop("This function only works with models that inherits 'lm' or 'glm' class!")
-
-  ## extract "terms" on the RHS of the model formula
-  tm <- terms(lm_glm)
-  tl <- attr(tm, "term.labels")
-  ## is SplineTerm found in the model?
-  if (!(SplineTerm %in% tl))
-    stop(sprintf("Required SplineTerm not found! Available terms are:\n    %s", toString(tl)))
-  ## is SplineTerm a `bs` or `ns`?
-  is.bs <- grepl("bs(", SplineTerm, fixed = TRUE)
-  is.ns <- grepl("ns(", SplineTerm, fixed = TRUE)
-  if ((!is.bs) && (!is.ns))
-    stop("Provided SplineTerm is neither 'bs()' nor `ns()` from package 'splines'!")
-  ## which position is SplineTerm in the RHS
+ExtractSplineTerm <- function (termsObject, SplineTerm) {
+  ## term labels
+  tl <- attr(termsObject, "term.labels")  ## tl <- labels(termsObject)
+  ## is SplineTerm found in termsObject?
+  if (!(SplineTerm %in% tl)) {
+    ## header
+    h <- "\n  Required SplineTerm not found! Available terms are:\n"
+    ## ordered list
+    ol <- sprintf("    * %s\n", tl)
+    ## stop
+    stop(h, ol, call. = FALSE)
+  }
+  ## is SplineTerm a bs() or ns()?
+  is_bs <- grepl("bs(", SplineTerm, fixed = TRUE)
+  is_ns <- grepl("ns(", SplineTerm, fixed = TRUE)
+  if (!(is_bs || is_ns))
+    stop("\n  Provided SplineTerm is neither 'bs()' nor `ns()` from package 'splines'!", call. = FALSE)
+  ## position of SplineTerm in termsObject
   pos <- match(SplineTerm, tl)
-  ## regression coefficients associated with SplineTerm
-  BsplineCoef <- unname(with(lm_glm, coefficients[assign == pos]))
-  ## is there `NA` in coefficients?
-  na <- is.na(BsplineCoef)
-  if (any(na)) {
-    warning("NA coefficients found for SplineTerm; Replacing NA by 0")
-    BsplineCoef[na] <- 0
-    }
+  ## extract predict call
+  predvars <- attr(termsObject, "predvars")  ## try: as.list(predvars)
+  SplineCall <- predvars[[2L + pos]]  ## try: as.list(SplineCall)
+  ## change variable name in SplineCall to x
+  SplineCall[[2]] <- quote(x)
+  ## extract degree and knots from SplineCall
+  if (is_bs) {
+    degree <- SplineCall[[3]]
+    interior_knots <- unname(SplineCall[[4]])
+    boundary_knots <- SplineCall[[5]]
+    SplineCall[[4]] <- interior_knots
+  } else {
+    degree <- 3L
+    interior_knots <- unname(SplineCall[[3]])
+    boundary_knots <- SplineCall[[4]]
+    SplineCall[[3]] <- interior_knots
+  }
+  x <- c(boundary_knots[1], interior_knots, boundary_knots[2])
+  ## return
+  list(pos = pos, degree = degree, knots = x, call = SplineCall)
+}
 
-  ####################
-  # analyze B-spline #
-  ####################
-
-  ## extract info from predict call
-  predvars <- attr(tm, "predvars")
-  ## try: as.list(predvars)
-  BsplineCall <- predvars[[2L + pos]]
-  ## change variable name to x
-  BsplineCall[[2]] <- quote(x)
-  ## spline degree (always 3L for 'ns()')
-  degree <- if (is.bs) BsplineCall[[3]] else 3L
-  ## spline knots (entry 4:5 for 'bs()' and 3:4 for 'ns()')
-  x <- with(as.list(BsplineCall[is.bs + 3:4]), c(Boundary.knots[1], unname(knots), Boundary.knots[2]))
-  ## spline values at knots
-  y <- base::c(eval(BsplineCall, data.frame(x = x)) %*% BsplineCoef)
-  ## number of pieces
+PiecePolyRepara <- function (SplineTerm, SplineCoef, shift = TRUE) {
+  x <- SplineTerm$knots
+  degree <- SplineTerm$degree
+  SplineCall <- SplineTerm$call
   n_pieces <- length(x) - 1L
-
-  ##################################################
-  # reparametrize B-spline as piecewise polynomial #
-  ##################################################
-
   ## initialize piecewise polynomial coefficients (matrix)
   PiecePolyCoef <- matrix(0, degree + 1L, n_pieces)
   ## loop through pieces
@@ -99,21 +93,61 @@ RegBsplineAsPiecePoly <- function (lm_glm, SplineTerm, shift = TRUE) {
     ## an evenly-spaced grid between x[i] and x[i + 1]
     xg <- seq.int(x[i], x[i + 1L], length.out = degree + 1L)
     ## spline values on the grid
-    yg <- base::c(eval(BsplineCall, data.frame(x = xg)) %*% BsplineCoef)
+    yg <- c(eval(SplineCall, data.frame(x = xg)) %*% SplineCoef)
     ## basis matrix on the grid
     Xg <- base::outer(xg - shift * x[i], 0:degree, "^")
     ## estimate linear regression yg ~ Xg + 0 by solving normal equation
-    U <- base::chol.default(base::crossprod(Xg))
-    PiecePolyCoef[, i] <- base::backsolve(U, base::forwardsolve(t.default(U), base::crossprod(Xg, yg)))
+    A <- base::crossprod(Xg)
+    b <- base::crossprod(Xg, yg)
+    U <- base::chol.default(A)
+    PiecePolyCoef[, i] <- base::backsolve(U, base::forwardsolve(t.default(U), b))
     ## next piece
     i <- i + 1L
+  }
+  ## return
+  PiecePolyCoef
+}
+
+## export a `bs` or `ns` term in a "lm", "glm" or "lme" as piecewise polynomials
+RegSplineAsPiecePoly <- function (RegModel, SplineTerm, shift = TRUE) {
+  
+  ## input validation
+  if (!inherits(RegModel, c("lm", "glm", "lme")))
+    stop("This function only works with models that inherit 'lm', 'glm' or 'lme' class!")
+
+  ## extract "terms" on the RHS of the model formula
+  RegSpline <- ExtractSplineTerm(terms(RegModel), SplineTerm)
+  pos <- RegSpline$pos
+  
+  ## regression coefficients associated with SplineTerm
+  if (inherits(RegModel, c("lm", "glm"))) {
+    RegSplineCoef <- with(RegModel, coefficients[assign == pos])
+  } else {
+    ind <- attr(RegModel$fixDF, "assign")[[SplineTerm]]
+    RegSplineCoef <- RegModel$coefficients$fixed[ind]  ## fixed.effects(RegModel)
+  }
+  RegSplineCoef <- unname(RegSplineCoef)
+
+  ## is there `NA` in coefficients?
+  na <- is.na(RegSplineCoef)
+  if (any(na)) {
+    warning("NA coefficients found for SplineTerm; Replacing NA by 0")
+    RegSplineCoef[na] <- 0
     }
 
-  ## return coefficient matrix, shift, knots, BsplineCall and BsplineCoef
+  ## it is not possible to use CubicInterpSplineAsPiecePoly for reparametrization
+  ## it only supports ns() term but not bs() term
+  PiecePolyCoef <- PiecePolyRepara(RegSpline, RegSplineCoef, shift)
+
+  ## return coefficient matrix, shift, knots, SplineCall and RegSplineCoef
   structure(list(PiecePoly = list(coef = PiecePolyCoef, shift = shift),
-                 Bspline = list(call = BsplineCall, coef = BsplineCoef),
-                 knots = x), class = c("PiecePoly", "RegBspline"))
-  }
+                 knots = RegSpline$knots), class = c("PiecePoly", "RegSpline"))
+}
+
+RegBsplineAsPiecePoly <- function (lm_glm, SplineTerm, shift = TRUE) {
+  warning("RegBsplineAsPiecePoly is now obsolete and likely to be removed in the next update; use RegSplineAsPiecePoly")
+  RegSplineAsPiecePoly(lm_glm, SplineTerm, shift)
+}
 
 ##############################
 # S3 methods for "PiecePoly" #
