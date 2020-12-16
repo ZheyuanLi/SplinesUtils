@@ -1,11 +1,11 @@
 Package: SplinesUtils
-Version: 0.1-1
-Date: 2018-10-07
-Title: Utility functions for univariate cubic interpolation splines, smoothing splines and regression B-splines
+Version: 0.2
+Date: 2020-12-16
+Title: Utility functions for univariate cubic interpolation splines, smoothing splines and regression splines
 Author: Zheyuan Li <zheyuan.li@bath.edu>
 Maintainer: Zheyuan Li <zheyuan.li@bath.edu>
 Depends: R (>= 3.4.0), splines
 Imports: stats, graphics
-Description: Reparametrize univariate cubic interpolation splines, smoothing splines and regression B-splines as piecewise polynomials. Export polynomial coefficients as a matrix and print polynomial equations as formatted strings. Plot and predict a spline or its derivatives. Solve a spline or its derivatives for a given value.
+Description: Splines that are used in regression or smoothing models often adopt basis representation. While such representation is recommended for numerical computations, it is neither intuitive to interpret, nor easy to derive mathematical property of the spline. Package "SplinesUtils" provides functions that reparametrize univariate cubic interpolation splines, smoothing splines and regression splines (used in "lm", "glm", "lme") to piecewise polynomials, by exporting piecewise polynomial coefficients as a matrix and print piecewise polynomial equations as formatted strings. The package also provides generic functions like 1) plot() and predict() for plotting and predicting a spline or its derivatives; 2) solve() for solving a spline or its derivatives for a given value, specially useful for identifying local extrama of the spline.
 License: GPL-3
 NeedsCompilation: no
