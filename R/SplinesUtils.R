@@ -1,3 +1,5 @@
+mystop <- function (msg) stop("\n  ", msg, call. = FALSE)
+
 ########################################################
 # cubic interpolation splines in R core as "PiecePoly" #
 ########################################################
@@ -5,7 +7,7 @@
 CubicInterpSplineAsPiecePoly <- function (x, y, method = c("fmm", "natural", "periodic", "hyman")) {
   ## method validation
   if (!(method %in% c("fmm", "natural", "periodic", "hyman")))
-    stop("'method' must be one of the following: 'fmm', 'natural', 'periodic', 'hyman'!")
+    mystop("'method' must be one of the following: 'fmm', 'natural', 'periodic', 'hyman'!")
   ## use `splinefun` for cubic spline interpolation
   CubicInterpSpline <- stats::splinefun(x, y, method)
   ## extract construction info
@@ -26,7 +28,7 @@ CubicInterpSplineAsPiecePoly <- function (x, y, method = c("fmm", "natural", "pe
 SmoothSplineAsPiecePoly <- function (SmoothSpline) {
   ## input validation
   if (!inherits(SmoothSpline, "smooth.spline"))
-    stop("This function only works with models that inherits 'smooth.spline' class!")
+    mystop("This function only works with models that inherit 'smooth.spline' class!")
   ## knots of the smoothing spline
   kx <- with(SmoothSpline$fit, knot * range + min)
   kx <- kx[4:(length(kx) - 3)]
@@ -55,7 +57,7 @@ ExtractSplineTerm <- function (termsObject, SplineTerm) {
   is_bs <- grepl("bs(", SplineTerm, fixed = TRUE)
   is_ns <- grepl("ns(", SplineTerm, fixed = TRUE)
   if (!(is_bs || is_ns))
-    stop("\n  Provided SplineTerm is neither 'bs()' nor `ns()` from package 'splines'!", call. = FALSE)
+    mystop("Provided SplineTerm is neither 'bs()' nor 'ns()' from package 'splines'!")
   ## position of SplineTerm in termsObject
   pos <- match(SplineTerm, tl)
   ## extract predict call
@@ -95,11 +97,11 @@ PiecePolyRepara <- function (SplineTerm, SplineCoef, shift = TRUE) {
     ## spline values on the grid
     yg <- c(eval(SplineCall, data.frame(x = xg)) %*% SplineCoef)
     ## basis matrix on the grid
-    Xg <- base::outer(xg - shift * x[i], 0:degree, "^")
+    Xg <- outer(xg - shift * x[i], 0:degree, "^")
     ## estimate linear regression yg ~ Xg + 0 by solving normal equation
     A <- base::crossprod(Xg)
     b <- base::crossprod(Xg, yg)
-    U <- base::chol.default(A)
+    U <- chol.default(A)
     PiecePolyCoef[, i] <- base::backsolve(U, base::forwardsolve(t.default(U), b))
     ## next piece
     i <- i + 1L
@@ -113,7 +115,7 @@ RegSplineAsPiecePoly <- function (RegModel, SplineTerm, shift = TRUE) {
   
   ## input validation
   if (!inherits(RegModel, c("lm", "glm", "lme")))
-    stop("This function only works with models that inherit 'lm', 'glm' or 'lme' class!")
+    mystop("This function only works with models that inherit 'lm', 'glm' or 'lme' class!")
 
   ## extract "terms" on the RHS of the model formula
   RegSpline <- ExtractSplineTerm(terms(RegModel), SplineTerm)
@@ -254,10 +256,9 @@ plot.PiecePoly <- function (x, spread = 3L, deriv = 0L, show.knots = FALSE, ...)
   x <- PiecePolyObject$knots
   ## deriv validation
   if (deriv > degree) {
-    plot.default(x, rep.int(0, length(x)), "l")
+    plot.default(x, rep.int(0, length(x)), "l", ylab = "y")
     return(NULL)
     }
-  if (deriv > 2) stop("The function only plots up to 2nd derivatives!")
   ## get power
   power <- 0:(degree - deriv)
   ## evaluation grid
@@ -270,9 +271,8 @@ plot.PiecePoly <- function (x, spread = 3L, deriv = 0L, show.knots = FALSE, ...)
     xg[[i]] <- seq.int(x[i], x[i + 1], length.out = spread * (degree + 1L))
     ## evaluate the polynomial with computed coefficients
     pc <- PiecePolyCoef[, i]
-    if (deriv > 0) pc <- pc[-1] * seq_len(length(pc) - 1L)
-    if (deriv > 1) pc <- pc[-1] * seq_len(length(pc) - 1L)
-    yg[[i]] <- base::c(base::outer(xg[[i]] - shift * x[i], power, "^") %*% pc)
+    if (deriv > 0) pc <- pc[-seq_len(deriv)] * choose(deriv:degree, deriv) * factorial(deriv)
+    yg[[i]] <- c(outer(xg[[i]] - shift * x[i], power, "^") %*% pc)
     ## next piece
     i <- i + 1L
     }
@@ -283,6 +283,8 @@ plot.PiecePoly <- function (x, spread = 3L, deriv = 0L, show.knots = FALSE, ...)
   if (show.knots) abline(v = x, lty = 3, col = 8)
   ## invisibly return data for plotting
   xgyg <- list(x = xg, y = yg)
+  ## interior knots are included twice in 'xg', but this is actually good
+  ## in case 'deriv' = 'degree', we don't need 'type = "s"' inside 'plot.default'
   }
 
 ## `predict` method for "PiecePoly"
@@ -298,14 +300,13 @@ predict.PiecePoly <- function (object, newx, deriv = 0L, ...) {
   degree <- dim(PiecePolyCoef)[1L] - 1L
   ## deriv validation
   if (deriv > degree) return(numeric(length(newx)))
-  if (deriv > 2) stop("The function only computes up to 2nd derivatives!")
   ## get power
   power <- 0:(degree - deriv)
   ## extract knots
   x <- PiecePolyObject$knots
   ## which piece?
-  piece_id <- base::findInterval(newx, x, TRUE)
-  ind <- base::split.default(seq_len(length(newx)), piece_id)
+  piece_id <- findInterval(newx, x, TRUE)
+  ind <- split.default(seq_len(length(newx)), piece_id)
   unique_piece_id <- as.integer(names(ind))
   n_pieces <- length(unique_piece_id)
   ## loop through pieces
@@ -315,9 +316,8 @@ predict.PiecePoly <- function (object, newx, deriv = 0L, ...) {
     ii <- unique_piece_id[i]
     xi <- newx[ind[[i]]] - shift * x[ii]
     pc <- PiecePolyCoef[, ii]
-    if (deriv > 0) pc <- pc[-1] * seq_len(length(pc) - 1L)
-    if (deriv > 1) pc <- pc[-1] * seq_len(length(pc) - 1L)
-    y[ind[[i]]] <- base::outer(xi, power, "^") %*% pc
+    if (deriv > 0) pc <- pc[-seq_len(deriv)] * choose(deriv:degree, deriv) * factorial(deriv)
+    y[ind[[i]]] <- c(outer(xi, power, "^") %*% pc)
     i <- i + 1L
     }
   y
@@ -343,7 +343,7 @@ solve.PiecePoly <- function (a, b = 0, deriv = 0L, ...) {
   ## extract knots
   x <- PiecePolyObject$knots
   ## deriv validation
-  if (!(deriv %in% c(0, 1))) stop("'deriv' can only be 0 or 1")
+  if (deriv >= degree) mystop("'deriv' can not exceed 'degree'!")
   ## list of roots on each piece
   xr <- vector("list", n_pieces)
   ## loop through pieces
@@ -352,7 +352,7 @@ solve.PiecePoly <- function (a, b = 0, deriv = 0L, ...) {
     ## polynomial coefficient
     pc <- PiecePolyCoef[, i]
     ## take derivative
-    if (deriv == 1) pc <- pc[-1] * seq_len(length(pc) - 1L)
+    if (deriv > 0) pc <- pc[-seq_len(deriv)] * choose(deriv:degree, deriv) * factorial(deriv)
     pc[1] <- pc[1] - y
     ## complex roots
     croots <- base::polyroot(pc)
